@@ -1,119 +1,191 @@
-/* Dual Axis Motion Tracker Project
-Code By Vineeth Penugonda
-Email: 201401002@daiict.ac.in*/
 
-#include<Servo.h>
+#include <Servo.h> // include Servo library 
+#include<LiquidCrystal.h>
+#define VOLT A5
 
-//Horizontal Servo
-Servo horizontal;
-int servoh = 180;
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
 
-int servohLimitRight = 180; //180 horizontal MAX
-int servohLimitLeft = 65; //65 horizontal MIN
+// 180 horizontal MAX
+Servo horizontal; // horizontal servo
+int servoh = 180;   // 90;     // stand horizontal servo
 
-//Vertical Servo
-Servo vertical;
-int servov = 45; 
+int servohLimitHigh = 180;
+int servohLimitLow = 65;
 
-int servovLimitRight = 80; //80 vertical MAX
-int servovLimitLeft = 15;  //15 vertical MIN
+// 65 degrees MAX
+Servo vertical;   // vertical servo 
+int servov = 45;    //   90;     // stand vertical servo
 
-//LDR Analog pin connections
-int ldr_top_right = 1;
-int ldr_top_left = 0;
-int ldr_down_right = 3;
-int ldr_down_left = 2;
+int x=0; // Wiper Timer
 
-void setup() {
-  Serial.begin(9600); //9600 bauds=9600 bits per second
-  Serial.print("**** Dual Solar Tracker Project ****");
-  Serial.print(" ");
-  Serial.print("Initializing...");
-  horizontal.attach(9);
-  vertical.attach(10);
-  horizontal.write(180); //Inital angle at which horizontal servo should be
-  vertical.write(45); //Inital angle at which vertical servo should be
-  delay(3000);
+int servovLimitHigh = 80;
+int servovLimitLow = 15;
+
+Servo wiper;
+int servow=0; // Wiper Servo
+
+// LDR pin connections
+//  name  = analogpin;
+int ldrlt = 2; //LDR down left - BOTTOM LEFT    <--- BDG
+int ldrrt = 3; //LDR down rigt - BOTTOM RIGHT 
+int ldrld = 0; //LDR top left - TOP LEFT
+int ldrrd = 1; //ldr top rigt - TOP RIGHT
+
+int temp1;
+float volts;
+
+void setup()
+{
+  Serial.begin(9600);
+// servo connections
+// name.attacht(pin);
+  // Attach two 4.7k's in parallel. Use Voltage Divider Circuit.
+  pinMode(8, OUTPUT);  
+  analogWrite(8, 25);
+  lcd.begin(16, 2); 
+  horizontal.attach(6); 
+  vertical.attach(7);
+  //wiper.attach(8); 
+  horizontal.write(180);
+  delay(1000);
+  vertical.write(45);
+  delay(1000);
+  wiper.write(180);
 }
 
-void loop() {
-  //Read Values from the LDR's
-  int lt = analogRead(ldr_top_left);
-  int rt = analogRead(ldr_top_right);
-  int ld = analogRead(ldr_down_left);
-  int rd = analogRead(ldr_down_right);
+void loop() 
+{
+  int lt = analogRead(ldrlt); // down left
+  int rt = analogRead(ldrrt); // down right
+  int ld = analogRead(ldrld); // top left
+  int rd = analogRead(ldrrd); // top rigt
+  
+  // int dtime = analogRead(4)/20; // read potentiometers  
+  // int tol = analogRead(5)/4;
+  int dtime = 10;
+  int tol = 50;
+  
+  int avt = (lt + rt) / 2; // average value top
+  int avd = (ld + rd) / 2; // average value down
+  int avl = (lt + ld) / 2; // average value left
+  int avr = (rt + rd) / 2; // average value right
 
-  int delay_time = 10; //10 milliseconds
-  int tolerance = 50;
-
-  int avg_top = (ldr_top_left + ldr_top_right) / 2; //average value top
-  int avg_down = (ldr_down_left + ldr_down_right) / 2; //average value down
-  int avg_left = (ldr_down_left + ldr_top_left) / 2; //average value left
-  int avg_right = (ldr_down_right + ldr_top_right) / 2; //average value right
-
-  int diff_v = avg_top - avg_down; //Difference between top and down average values
-  int diff_h = avg_left - avg_right; //Difference between left and right average values
-
+  int dvert = avt - avd; // check the diffirence of up and down
+  int dhoriz = avl - avr;// check the diffirence og left and rigt
+  
+//  Serial,print(lt);
+  Serial.print(avt);
   Serial.print(" ");
-  Serial.print("Average Value Top: ");
-  Serial.print(avg_top);
+  Serial.print(avd);
   Serial.print(" ");
-  Serial.print("Average Value Down: ");
-  Serial.print(avg_down);
+  Serial.print(avl);
   Serial.print(" ");
-  Serial.print("Average Value Left: ");
-  Serial.print(avg_left);
-  Serial.print(" ");
-  Serial.print("Average Value Right: ");
-  Serial.print(avg_right);
+  Serial.print(avr);
   Serial.print("   ");
+  Serial.print(dtime);
+  Serial.print("   ");
+  Serial.print(tol);
+  Serial.println(" ");
 
-  // Set vertical servo into position
-  // diff_v can be both positive or negative. It depends on average top and average down values.
-  if(-1*tolerance > diff_v || diff_v > tolerance) 
-  {
-    if(avg_top > avg_down)
-    {
-      servov= ++servov; //Increase by 1 degree
-      if(servov > servovLimitRight)
-      {
-        servov = servovLimitRight;
-      }
-    } 
-    else if(avg_top < avg_down)
-    {
-      servov= --servov;
-    if (servov < servovLimitLeft)
-  {
-    servov = servovLimitLeft;
-  }
-    }
-    vertical.write(servov);
-  }
+ voltmeasure();
 
-  // diff_h can be both positive or negative. It depends on average left and average right values.
-  if(-1*tolerance > diff_h || diff_h > tolerance)
+ 
+
+   
+  if (-1*tol > dvert || dvert > tol) // check if the diffirence is in the tolerance else change vertical angle
   {
-    if(avg_left > avg_right)
+  if (avt > avd)
+  {
+    servov = ++servov;
+     if (servov > servovLimitHigh) 
+     { 
+      servov = servovLimitHigh;
+     }
+  }
+  else if (avt < avd)
+  {
+    servov= --servov;
+    if (servov < servovLimitLow)
+  {
+    servov = servovLimitLow;
+  }
+  }
+  vertical.write(servov);
+  }
+  
+  if (-1*tol > dhoriz || dhoriz > tol) // check if the diffirence is in the tolerance else change horizontal angle
+  {
+  if (avl > avr)
+  {
+    servoh = --servoh;
+    if (servoh < servohLimitLow)
     {
-      servoh= --servoh; // Decrease by 1 degree
-      if(servoh < servovLimitLeft)
-      {
-        servoh = servovLimitLeft;
-      }
-    } else if(avg_left < avg_right)
-    {
-      servoh= ++servoh; //Increase by 1 degree
-      if(servoh > servohLimitRight)
-      {
-        servoh = servovLimitRight;
-      }
+    servoh = servohLimitLow;
     }
-  else if(avg_left = avg_right)
+  }
+  else if (avl < avr)
   {
-    // Do Nothing
+    servoh = ++servoh;
+     if (servoh > servohLimitHigh)
+     {
+     servoh = servohLimitHigh;
+     }
+  }
+  else if (avl = avr)
+  {
+    // nothing
   }
   horizontal.write(servoh);
+  }
+
+   
+  
+   delay(dtime);
+   
+   x+=dtime;
+   
+   if(x==10000)
+   {
+    x = wiperfunc();
+   }
 }
-  delay(delay_time);
+
+int wiperfunc()
+{
+  servow = 180;
+  horizontal.write(120);
+  vertical.write(45);
+  wiper.write(180);
+  // voltmeasure();      
+  int i;
+       
+  for(i=0;i<=180;i++)
+  {
+   servow= --servow;
+   wiper.write(servow);
+   delay(100);
+   }
+       
+   for(i=180;i>=0;i--)
+   {
+   servow = ++servow;
+   wiper.write(servow);
+   delay(100);
+   }
+   return 0;
+   }
+
+int voltmeasure()
+{
+  lcd.setCursor(0,1);
+  temp1=analogRead(VOLT);
+  volts= (temp1/511.5)*5;
+  lcd.print("Voltage: ");
+  lcd.print(volts);
+  return 0;
 }
+
+
+
+
+
